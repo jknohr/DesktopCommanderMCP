@@ -1,109 +1,188 @@
-import { spawn } from 'child_process';
+import { spawn } from 'bun';
 import { TerminalSession, CommandExecutionResult, ActiveSession } from './types.js';
-import { DEFAULT_COMMAND_TIMEOUT } from './config.js';
+import { DEFAULT_COMMAND_TIMEOUT, SHELL, SHELL_ARGS } from './config.js';
 import { configManager } from './config-manager.js';
 import {capture} from "./utils/capture.js";
 
 interface CompletedSession {
-  pid: number;
-  output: string;
-  exitCode: number | null;
-  startTime: Date;
-  endTime: Date;
+    pid: number;
+    output: string;
+    exitCode: number | null;
+    startTime: Date;
+    endTime: Date;
 }
 
 export class TerminalManager {
   private sessions: Map<number, TerminalSession> = new Map();
   private completedSessions: Map<number, CompletedSession> = new Map();
+  private nextPid: number = 1;
   
+  private getNextPid(): number {
+    const pid = this.nextPid;
+    this.nextPid = (this.nextPid + 1) >>> 0; // Wrap around at 2^32
+    return pid;
+  }
+
   async executeCommand(command: string, timeoutMs: number = DEFAULT_COMMAND_TIMEOUT, shell?: string): Promise<CommandExecutionResult> {
     // Get the shell from config if not specified
-    let shellToUse: string | boolean | undefined = shell;
-    if (!shellToUse) {
-      try {
-        const config = await configManager.getConfig();
-        shellToUse = config.defaultShell || true;
-      } catch (error) {
-        // If there's an error getting the config, fall back to default
-        shellToUse = true;
+    let shellToUse: string = shell || SHELL;
+    let shellArgs: string[] = SHELL_ARGS;
+    
+    try {
+      const config = await configManager.getConfig();
+      if (!shell && config.defaultShell) {
+        shellToUse = config.defaultShell;
       }
+    } catch (error) {
+      console.error('Failed to get shell from config, using default:', error);
     }
-    
-    const spawnOptions = { 
-      shell: shellToUse
-    };
-    
-    const process = spawn(command, [], spawnOptions);
+
+    const proc = spawn([shellToUse, ...shellArgs, command], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: { ...process.env, TERM: 'xterm-256color' } // Ensure proper terminal type for Linux
+    });
+
+    const pid = this.getNextPid();
     let output = '';
-    
-    // Ensure process.pid is defined before proceeding
-    if (!process.pid) {
-      // Return a consistent error object instead of throwing
-      return {
-        pid: -1,  // Use -1 to indicate an error state
-        output: 'Error: Failed to get process ID. The command could not be executed.',
-        isBlocked: false
-      };
-    }
-    
+
     const session: TerminalSession = {
-      pid: process.pid,
-      process,
+      pid,
+      process: proc,
       lastOutput: '',
       isBlocked: false,
       startTime: new Date()
     };
     
-    this.sessions.set(process.pid, session);
+    this.sessions.set(pid, session);
 
-    return new Promise((resolve) => {
-      process.stdout.on('data', (data) => {
-        const text = data.toString();
-        output += text;
-        session.lastOutput += text;
-      });
-
-      process.stderr.on('data', (data) => {
-        const text = data.toString();
-        output += text;
-        session.lastOutput += text;
-      });
-
-      setTimeout(() => {
-        session.isBlocked = true;
-        resolve({
-          pid: process.pid!,
-          output,
-          isBlocked: true
-        });
-      }, timeoutMs);
-
-      process.on('exit', (code) => {
-        if (process.pid) {
-          // Store completed session before removing active session
-          this.completedSessions.set(process.pid, {
-            pid: process.pid,
-            output: output + session.lastOutput, // Combine all output
-            exitCode: code,
-            startTime: session.startTime,
-            endTime: new Date()
-          });
+    // Set up signal handlers for Linux process management
+    const cleanup = () => {
+      try {
+        if (!proc.killed) {
+          // Send SIGTERM first for graceful shutdown
+          proc.kill('SIGTERM');
           
-          // Keep only last 100 completed sessions
-          if (this.completedSessions.size > 100) {
-            const oldestKey = Array.from(this.completedSessions.keys())[0];
-            this.completedSessions.delete(oldestKey);
-          }
-          
-          this.sessions.delete(process.pid);
+          // After 2 seconds, force kill if still running
+          setTimeout(() => {
+            if (!proc.killed) {
+              proc.kill('SIGKILL');
+            }
+          }, 2000);
         }
-        resolve({
-          pid: process.pid!,
-          output,
-          isBlocked: false
-        });
+      } catch (error) {
+        capture('server_request_error', { error: `Failed to cleanup process ${pid}: ${error}` });
+      }
+    };
+
+    // Handle process exit
+    process.on('exit', cleanup);
+    
+    try {
+      // Capture output using Bun's native stream reading
+      let stdoutText = '';
+      let stderrText = '';
+
+      // Read stdout
+      if (proc.stdout) {
+        const reader = proc.stdout.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = new TextDecoder().decode(value);
+          stdoutText += chunk;
+          session.lastOutput = chunk;
+        }
+      }
+
+      // Read stderr
+      if (proc.stderr) {
+        const reader = proc.stderr.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = new TextDecoder().decode(value);
+          stderrText += chunk;
+          session.lastOutput = chunk;
+        }
+      }
+
+      // Wait for process completion with timeout
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          cleanup();
+          reject(new Error(`Command timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
       });
+
+      // Wait for process exit
+      const exitPromise = proc.exited;
+      
+      try {
+        const exitCode = await Promise.race([exitPromise, timeoutPromise]);
+        
+        this.completedSessions.set(pid, {
+          pid,
+          output: session.lastOutput,
+          exitCode: typeof exitCode === 'number' ? exitCode : null,
+          startTime: session.startTime,
+          endTime: new Date()
+        });
+        this.sessions.delete(pid);
+
+        const result: CommandExecutionResult = {
+          pid,
+          output: stdoutText + stderrText,
+          startTime: session.startTime,
+          endTime: new Date()
+        };
+
+        // Clean up exit handler
+        process.off('exit', cleanup);
+
+        return result;
+      } catch (error) {
+        cleanup();
+        throw error;
+      }
+    } catch (error) {
+      capture('server_request_error', { error: `Command execution failed: ${error}` });
+      throw error;
+    }
+  }
+
+  private handleProcessCompletion(pid: number, session: TerminalSession, output: string, exitCode: number | null) {
+    // Store completed session
+    this.completedSessions.set(pid, {
+      pid,
+      output: session.lastOutput || output,
+      exitCode,
+      startTime: session.startTime,
+      endTime: new Date()
     });
+    
+    // Keep only last 100 completed sessions
+    if (this.completedSessions.size > 100) {
+      const oldestKey = Array.from(this.completedSessions.keys())[0];
+      this.completedSessions.delete(oldestKey);
+    }
+    
+    this.cleanup(pid);
+  }
+
+  private cleanup(pid: number) {
+    const session = this.sessions.get(pid);
+    if (session) {
+      try {
+        session.process.kill('SIGTERM');
+      } catch (error) {
+        capture('server_request_error', { 
+          error: error instanceof Error ? error.message : String(error),
+          message: `Error cleaning up process ${pid}`
+        });
+      }
+      this.sessions.delete(pid);
+    }
   }
 
   getNewOutput(pid: number): string | null {
@@ -126,11 +205,6 @@ export class TerminalManager {
     return null;
   }
 
-    /**
-   * Get a session by PID
-   * @param pid Process ID
-   * @returns The session or undefined if not found
-   */
   getSession(pid: number): TerminalSession | undefined {
     return this.sessions.get(pid);
   }
@@ -142,19 +216,14 @@ export class TerminalManager {
     }
 
     try {
-        session.process.kill('SIGINT');
-        setTimeout(() => {
-          if (this.sessions.has(pid)) {
-            session.process.kill('SIGKILL');
-          }
-        }, 1000);
-        return true;
-      } catch (error) {
-        // Convert error to string, handling both Error objects and other types
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        capture('server_request_error', {error: errorMessage, message: `Failed to terminate process ${pid}:`});
-        return false;
-      }
+      session.process.kill();
+      this.sessions.delete(pid);
+      return true;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      capture('server_request_error', {error: errorMessage, message: `Failed to terminate process ${pid}`});
+      return false;
+    }
   }
 
   listActiveSessions(): ActiveSession[] {

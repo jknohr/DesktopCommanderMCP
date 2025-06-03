@@ -1,4 +1,4 @@
-import { ChildProcess } from 'child_process';
+import { Subprocess } from 'bun';
 
 export interface ProcessInfo {
   pid: number;
@@ -9,7 +9,7 @@ export interface ProcessInfo {
 
 export interface TerminalSession {
   pid: number;
-  process: ChildProcess;
+  process: Subprocess<"ignore", "pipe", "pipe">;
   lastOutput: string;
   isBlocked: boolean;
   startTime: Date;
@@ -18,7 +18,9 @@ export interface TerminalSession {
 export interface CommandExecutionResult {
   pid: number;
   output: string;
-  isBlocked: boolean;
+  isBlocked?: boolean;
+  startTime: Date;
+  endTime: Date;
 }
 
 export interface ActiveSession {

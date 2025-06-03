@@ -1,0 +1,170 @@
+# Command configurations for DesktopCommanderMCP
+# This file contains allowed and blocked commands for different tools and operations
+
+# System level commands that need sudo will be evaluated based on user permissions
+systemCommands:
+  allowSudo: true  # Allow sudo for system commands
+  allowNetworkConfig: true  # Allow network configuration
+
+# System and Network Commands
+system:
+  allowed:
+    - command: "ip"
+      description: "Show/manipulate routing, network devices, interfaces and tunnels"
+    - command: "ifconfig"
+      description: "Configure network interface"
+    - command: "route"
+      description: "Show/manipulate IP routing table"
+    - command: "netstat"
+      description: "Network statistics"
+    - command: "ss"
+      description: "Socket statistics"
+    - command: "iptables"
+      description: "Administration tool for IPv4/IPv6 packet filtering and NAT"
+    - command: "ping"
+      description: "Send ICMP ECHO_REQUEST to network hosts"
+    - command: "traceroute"
+      description: "Print the route packets trace to network host"
+    - command: "nmap"
+      description: "Network exploration tool and security scanner"
+    - command: "tcpdump"
+      description: "Dump traffic on a network"
+    - command: "nethogs"
+      description: "Net top tool grouping bandwidth per process"
+    - command: "dig"
+      description: "DNS lookup utility"
+    - command: "host"
+      description: "DNS lookup utility"
+    - command: "hostname"
+      description: "Show or set system hostname"
+    - command: "sudo systemctl"
+      description: "Control the systemd system and service manager"
+    - command: "sudo service"
+      description: "Run a System V init script"
+
+# Database Operations
+surrealdb:
+  allowed:
+    - command: "surreal start memory"
+      description: "Start an in-memory database server"
+    - command: "surreal start --user {username} --pass {password}"
+      description: "Start database with authentication"
+    - command: "surreal start --bind {address}"
+      description: "Start database on specific address (default: 127.0.0.1:8000)"
+    - command: "surreal start rocksdb://{path}"
+      description: "Start with RocksDB storage engine"
+    - command: "surreal start surrealkv://{path}"
+      description: "Start with SurrealKV storage engine"
+    - command: "surreal start --log {level}"
+      description: "Start with specific log level (none/error/warn/info/debug/trace)"
+    - command: "surreal start --strict"
+      description: "Start in strict mode"
+    - command: "surreal sql --endpoint {endpoint} --username {username} --password {password} --namespace {ns} --database {db}"
+      description: "Connect to database with SQL interface"
+    - command: "surreal start --allow-scripting"
+      description: "Allow execution of embedded scripting functions"
+    - command: "surreal start --allow-funcs"
+      description: "Allow specific functions"
+    - command: "surreal start --allow-net"
+      description: "Allow outbound network connections"
+    - command: "surreal start --unauthenticated"
+      description: "Start in unauthenticated mode"
+    - command: "surreal import"
+      description: "Import data into database"
+    - command: "surreal export"
+      description: "Export data from database"
+
+# Container Operations
+docker:
+  allowed:
+    - command: "docker ps"
+      description: "List containers"
+    - command: "docker images"
+      description: "List images"
+    - command: "docker build"
+      description: "Build images"
+    - command: "docker run"
+      description: "Run containers"
+    - command: "docker exec"
+      description: "Execute in container"
+    - command: "docker-compose up"
+      description: "Start services"
+    - command: "docker-compose down"
+      description: "Stop services"
+    - command: "docker logs"
+      description: "View logs"
+    - command: "docker pull"
+      description: "Pull images"
+    - command: "docker push"
+      description: "Push images"
+    - command: "docker network"
+      description: "Network management"
+    - command: "docker volume"
+      description: "Volume management"
+    - command: "docker inspect"
+      description: "Inspect containers/images"
+    - command: "docker restart"
+      description: "Restart containers"
+    - command: "docker stop"
+      description: "Stop containers"
+    - command: "docker start"
+      description: "Start containers"
+
+# Kubernetes Operations
+kubernetes:
+  allowed:
+    - command: "kubectl get"
+      description: "List resources"
+    - command: "kubectl describe"
+      description: "Show details"
+    - command: "kubectl logs"
+      description: "View logs"
+    - command: "kubectl apply"
+      description: "Apply manifests"
+    - command: "kubectl delete"
+      description: "Delete resources"
+    - command: "kubectl exec"
+      description: "Execute in pods"
+    - command: "kubectl port-forward"
+      description: "Port forwarding"
+    - command: "kubectl config"
+      description: "Manage config"
+    - command: "kubectl create"
+      description: "Create resources"
+    - command: "kubectl rollout"
+      description: "Manage rollouts"
+    - command: "kubectl scale"
+      description: "Scale resources"
+    - command: "kubectl top"
+      description: "Show resource usage"
+
+# Helm Commands
+helm:
+  allowed:
+    - command: "helm install"
+      description: "Install charts"
+    - command: "helm upgrade"
+      description: "Upgrade releases"
+    - command: "helm rollback"
+      description: "Rollback releases"
+    - command: "helm list"
+      description: "List releases"
+    - command: "helm repo"
+      description: "Manage repos"
+
+# Local Development Clusters
+localClusters:
+  allowed:
+    - command: "minikube start"
+      description: "Start local cluster"
+    - command: "minikube stop"
+      description: "Stop local cluster"
+    - command: "kind create"
+      description: "Create clusters"
+    - command: "kind delete"
+      description: "Delete clusters"
+
+# Critical system operations that should be blocked by default
+blocked:
+  - command: "rm -rf /"
+    reason: "Prevent root deletion"

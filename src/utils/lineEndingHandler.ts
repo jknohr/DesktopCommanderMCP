@@ -20,8 +20,8 @@ export function detectLineEnding(content: string): LineEndingStyle {
         }
     }
     
-    // Default to system line ending if no line endings found
-    return process.platform === 'win32' ? '\r\n' : '\n';
+    // Default to Linux line ending if no line endings found
+    return '\n';
 }
 
 /**

@@ -1,14 +1,14 @@
 {
-  "name": "@wonderwhy-er/desktop-commander",
+  "name": "jknohr/desktop-commander",
   "version": "0.2.2",
   "description": "MCP server for terminal operations and file editing",
   "license": "MIT",
-  "author": "Eduards Ruzga",
-  "homepage": "https://github.com/wonderwhy-er/DesktopCommanderMCP",
-  "bugs": "https://github.com/wonderwhy-er/DesktopCommanderMCP/issues",
+  "author": "jk",
+  "homepage": "https://github.com/kubuntu/DesktopCommanderMCP",
+  "bugs": "https://github.com/kubuntu/DesktopCommanderMCP/issues",
   "type": "module",
   "engines": {
-    "node": ">=18.0.0"
+    "node": "bun >= 1.2.5"
   },
   "bin": {
     "desktop-commander": "dist/index.js",
@@ -20,25 +20,25 @@
     "testemonials"
   ],
   "scripts": {
-    "sync-version": "node scripts/sync-version.js",
-    "bump": "node scripts/sync-version.js --bump",
-    "bump:minor": "node scripts/sync-version.js --bump --minor",
-    "bump:major": "node scripts/sync-version.js --bump --major",
-    "build": "tsc && shx cp setup-claude-server.js dist/ && shx chmod +x dist/*.js",
-    "watch": "tsc --watch",
-    "start": "node dist/index.js",
-    "start:debug": "node --inspect-brk=9229 dist/index.js",
-    "setup": "npm install && npm run build && node setup-claude-server.js",
-    "setup:debug": "npm install && npm run build && node setup-claude-server.js --debug",
-    "prepare": "npm run build",
-    "test": "node test/run-all-tests.js",
-    "link:local": "npm run build && npm link",
-    "unlink:local": "npm unlink",
-    "inspector": "npx @modelcontextprotocol/inspector dist/index.js",
-    "logs:view": "npm run build && node scripts/view-fuzzy-logs.js",
-    "logs:analyze": "npm run build && node scripts/analyze-fuzzy-logs.js",
-    "logs:clear": "npm run build && node scripts/clear-fuzzy-logs.js",
-    "logs:export": "npm run build && node scripts/export-fuzzy-logs.js"
+    "sync-version": "bun scripts/sync-version.js",
+    "bump": "bun scripts/sync-version.js --bump",
+    "bump:minor": "bun scripts/sync-version.js --bump --minor",
+    "bump:major": "bun scripts/sync-version.js --bump --major",
+    "build": "bun build ./src/index.ts --outdir dist --target bun && chmod +x dist/*.js",
+    "watch": "bun build ./src/index.ts --outdir dist --watch",
+    "start": "bun run dist/index.js",
+    "start:debug": "bun --inspect-brk=9229 dist/index.js",
+    "setup": "bun install && bun run build && bun run setup-claude-server.js",
+    "setup:debug": "bun install && bun run build && bun run setup-claude-server.js --debug",
+    "prepare": "bun run build",
+    "test": "bun test",
+    "link:local": "bun run build && bun link",
+    "unlink:local": "bun unlink",
+    "inspector": "bunx @modelcontextprotocol/inspector dist/index.js",
+    "logs:view": "bun run build && bun scripts/view-fuzzy-logs.js",
+    "logs:analyze": "bun run build && bun scripts/analyze-fuzzy-logs.js",
+    "logs:clear": "bun run build && bun scripts/clear-fuzzy-logs.js",
+    "logs:export": "bun run build && bun scripts/export-fuzzy-logs.js"
   },
   "publishConfig": {
     "access": "public"
@@ -64,19 +64,24 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.8.0",
+    "@types/yaml": "^1.9.7",
     "@vscode/ripgrep": "^1.15.9",
     "cross-fetch": "^4.1.0",
     "fastest-levenshtein": "^1.0.16",
     "glob": "^10.3.10",
+    "yaml": "^2.8.0",
     "zod": "^3.24.1",
     "zod-to-json-schema": "^3.23.5"
   },
   "devDependencies": {
+    "@types/bun": "^1.2.15",
     "@types/node": "^20.17.24",
-    "commander": "^13.1.0",
+    "commander": "^14.0.0",
     "nexe": "^5.0.0-beta.4",
     "nodemon": "^3.0.2",
     "shx": "^0.3.4",
     "typescript": "^5.3.3"
-  }
+  },
+  "module": "src/index.ts",
+  "private": true
 }

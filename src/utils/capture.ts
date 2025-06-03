@@ -1,7 +1,7 @@
-import {platform} from 'os';
-import {randomUUID} from 'crypto';
-import * as https from 'https';
-import {configManager} from '../config-manager.js';
+import { platform } from 'os';
+import { randomUUID } from 'crypto';
+import https from 'https';
+import { configManager } from '../config-manager.js';
 
 let VERSION = 'unknown';
 try {
@@ -112,10 +112,10 @@ export const capture = async (event: string, properties?: any) => {
                 const sanitized = sanitizeError(sanitizedProperties.error);
                 sanitizedProperties.error = sanitized.message;
                 if (sanitized.code) {
-                    sanitizedProperties.errorCode = sanitized.code;
+                    sanitizedProperties.error_code = sanitized.code;
                 }
             } else if (typeof sanitizedProperties.error === 'string') {
-                sanitizedProperties.error = sanitizeError(sanitizedProperties.error).message;
+                sanitizedProperties.error = sanitizeError({ message: sanitizedProperties.error }).message;
             }
         }
 
@@ -124,7 +124,7 @@ export const capture = async (event: string, properties?: any) => {
         for (const key of Object.keys(sanitizedProperties)) {
             const lowerKey = key.toLowerCase();
             if (sensitiveKeys.some(sensitiveKey => lowerKey.includes(sensitiveKey)) &&
-                lowerKey !== 'fileextension') { // keep fileExtension as it's safe
+                lowerKey !== 'fileextension') {
                 delete sanitizedProperties[key];
             }
         }
@@ -173,9 +173,9 @@ export const capture = async (event: string, properties?: any) => {
             });
 
             res.on('end', () => {
-                if (res.statusCode !== 200 && res.statusCode !== 204) {
-                    // Optional debug logging
-                    // console.debug(`GA tracking error: ${res.statusCode} ${data}`);
+                // Optional debug logging
+                if (process.env.DEBUG_ANALYTICS) {
+                    console.debug('Analytics response:', data);
                 }
             });
         });

@@ -1,12 +1,11 @@
 import { homedir, platform } from 'os';
 import { join } from 'path';
-import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { exec } from "node:child_process";
-import { version as nodeVersion } from 'process';
-import * as https from 'https';
 import { randomUUID } from 'crypto';
+
+// Bun-specific imports and type declarations
+const { file, spawn } = Bun;
 
 // Google Analytics configuration
 const GA_MEASUREMENT_ID = 'G-NGGDNL0K4L'; // Replace with your GA4 Measurement ID
@@ -30,18 +29,12 @@ let setupSteps = []; // Track setup progress
 let setupStartTime = Date.now();
 
 
-// Function to get npm version
+// Function to get bun version
 async function getNpmVersion() {
   try {
-    return new Promise((resolve, reject) => {
-      exec('npm --version', (error, stdout, stderr) => {
-        if (error) {
-          resolve('unknown');
-          return;
-        }
-        resolve(stdout.trim());
-      });
-    });
+    const proc = spawn(['bun', '--version']);
+    const output = await new Response(proc.stdout).text();
+    return output.trim();
   } catch (error) {
     return 'unknown';
   }
@@ -54,15 +47,14 @@ const getVersion = async () => {
         
         // Check if version.js exists in dist directory (when running from root)
         const versionPath = join(__dirname, 'version.js');
-        if (existsSync(versionPath)) {
+        if (await file(versionPath).exists()) {
             const { VERSION } = await import(versionPath);
             return VERSION;
         }
 
         const packageJsonPath = join(__dirname, 'package.json');
-        if (existsSync(packageJsonPath)) {
-            const packageJsonContent = readFileSync(packageJsonPath, 'utf8');
-            const packageJson = JSON.parse(packageJsonContent);
+        if (await file(packageJsonPath).exists()) {
+            const packageJson = await file(packageJsonPath).json();
             if (packageJson.version) {
                 return packageJson.version;
             }
@@ -406,22 +398,30 @@ function updateSetupStep(index, status, error = null) {
 
 async function execAsync(command) {
     const execStep = addSetupStep(`exec_${command.substring(0, 20)}...`);
-    return new Promise((resolve, reject) => {
+    try {
         // Use PowerShell on Windows for better Unicode support and consistency
-        const actualCommand = isWindows
-        ? `cmd.exe /c ${command}`
-        : command;
+        const actualCommand = isWindows ? ['cmd.exe', '/c', command] : command.split(' ');
 
-        exec(actualCommand, { timeout: 10000 }, (error, stdout, stderr) => {
-            if (error) {
-                updateSetupStep(execStep, 'failed', error);
-                reject(error);
-                return;
-            }
-            updateSetupStep(execStep, 'completed');
-            resolve({ stdout, stderr });
+        const proc = spawn(actualCommand, {
+            stdout: 'pipe',
+            stderr: 'pipe'
         });
-    });
+
+        const stdout = await new Response(proc.stdout).text();
+        const stderr = await new Response(proc.stderr).text();
+
+        if (!proc.success) {
+            const error = new Error(`Command failed with exit code ${proc.exitCode}`);
+            updateSetupStep(execStep, 'failed', error);
+            throw error;
+        }
+
+        updateSetupStep(execStep, 'completed');
+        return { stdout, stderr };
+    } catch (error) {
+        updateSetupStep(execStep, 'failed', error);
+        throw error;
+    }
 }
 
 async function restartClaude() {
@@ -769,3 +769,65 @@ if (process.argv.length >= 2 && process.argv[1] === fileURLToPath(import.meta.ur
         }, 1000);
     });
 }
+
+// New Linux-specific functions
+function getConfigPath() {
+  const HOME = homedir();
+  if (platform() === 'linux') {
+    return join(HOME, '.config', 'Claude', 'config.json');
+  }
+  return join(HOME, '.claude-server-commander', 'config.json');
+}
+
+async function listProcesses() {
+  const command = platform() === 'linux' ? 'ps' : 'tasklist';
+  const args = platform() === 'linux' ? ['aux'] : ['/FO', 'CSV'];
+  
+  try {
+    const output = await runCommand(command, args);
+    return output.split('\n').slice(1); // Skip header row
+  } catch (error) {
+    console.error('Failed to list processes:', error);
+    return [];
+  }
+}
+
+async function killProcess(pid) {
+  const command = platform() === 'linux' ? 'kill' : 'taskkill';
+  const args = platform() === 'linux' ? ['-9', pid] : ['/PID', pid, '/F'];
+  
+  try {
+    await runCommand(command, args);
+    return true;
+  } catch (error) {
+    console.error(`Failed to kill process ${pid}:`, error);
+    return false;
+  }
+}
+
+// Main setup function
+async function main() {
+  const configPath = getConfigPath();
+  
+  try {
+    // Initialize configuration
+    await initializeConfigFile(configPath);
+    
+    // Track installation
+    await trackInstallation();
+    
+    // Linux-specific setup
+    if (platform() === 'linux') {
+      // Ensure proper file permissions
+      await runCommand('chmod', ['-R', '700', dirname(configPath)]);
+    }
+    
+    console.log('Setup completed successfully');
+  } catch (error) {
+    console.error('Setup failed:', error);
+    process.exit(1);
+  }
+}
+
+// Run setup
+main();

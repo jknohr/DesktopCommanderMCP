@@ -1,6 +1,10 @@
 import {configManager} from './config-manager.js';
 import {capture} from "./utils/capture.js";
 
+// Linux shell configuration
+const SHELL = '/bin/bash';
+const SHELL_ARGS = ['-c'];
+
 class CommandManager {
 
     getBaseCommand(command: string) {
@@ -13,7 +17,8 @@ class CommandManager {
             commandString = commandString.trim();
 
             // Define command separators - these are the operators that can chain commands
-            const separators = [';', '&&', '||', '|', '&'];
+            // Added Linux-specific redirections and pipe operators
+            const separators = [';', '&&', '||', '|', '&', '2>', '1>', '>>', '>', '<'];
 
             // This will store our extracted commands
             const commands: string[] = [];
@@ -127,8 +132,8 @@ class CommandManager {
     // This extracts the actual command name from a command string
     extractBaseCommand(commandStr: string): string | null {
         try {
-            // Remove environment variables (patterns like KEY=value)
-            const withoutEnvVars = commandStr.replace(/\w+=\S+\s*/g, '').trim();
+            // Remove environment variables (patterns like KEY=value or KEY="value with spaces")
+            const withoutEnvVars = commandStr.replace(/\w+=([^\s"']+|"[^"]+"|'[^']+')\s*/g, '').trim();
 
             // If nothing remains after removing env vars, return null
             if (!withoutEnvVars) return null;
@@ -137,12 +142,13 @@ class CommandManager {
             const tokens = withoutEnvVars.split(/\s+/);
             const firstToken = tokens[0];
 
-            // Check if it starts with special characters like (, $ that might indicate it's not a regular command
-            if (['(', '$'].includes(firstToken[0])) {
+            // Check if it starts with special characters like (, $, ` that might indicate it's not a regular command
+            if (['(', '$', '`', '~'].includes(firstToken[0])) {
                 return null;
             }
 
-            return firstToken.toLowerCase();
+            // Handle Linux path resolution (remove leading ./ if present)
+            return firstToken.replace(/^\.\//, '').toLowerCase();
         } catch (error) {
             capture('Error extracting base command');
             return null;

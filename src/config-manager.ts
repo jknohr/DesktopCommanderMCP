@@ -2,18 +2,20 @@ import fs from 'fs/promises';
 import path from 'path';
 import { existsSync } from 'fs';
 import { mkdir } from 'fs/promises';
-import os from 'os';
+import yaml from 'yaml';
 import { VERSION } from './version.js';
 import { CONFIG_FILE } from './config.js';
+import { CommandConfig } from './types/command-config';
 
 export interface ServerConfig {
-  blockedCommands?: string[];
+  commandConfig?: CommandConfig;
   defaultShell?: string;
   allowedDirectories?: string[];
-  telemetryEnabled?: boolean; // New field for telemetry control
-  fileWriteLineLimit?: number; // Line limit for file write operations
-  fileReadLineLimit?: number; // Default line limit for file read operations (changed from character-based)
-  [key: string]: any; // Allow for arbitrary configuration keys
+  telemetryEnabled?: boolean;
+  fileWriteLineLimit?: number;
+  fileReadLineLimit?: number;
+  version?: string;
+  [key: string]: any;
 }
 
 /**
@@ -21,13 +23,52 @@ export interface ServerConfig {
  */
 class ConfigManager {
   private configPath: string;
+  private commandConfigPath: string;
   private config: ServerConfig = {};
   private initialized = false;
 
   constructor() {
-    // Get user's home directory
-    // Define config directory and file paths
     this.configPath = CONFIG_FILE;
+    this.commandConfigPath = path.join(path.dirname(CONFIG_FILE), 'config', 'commands.yaml');
+  }
+
+  private async loadCommandConfig(): Promise<CommandConfig> {
+    try {
+      const configDir = path.dirname(this.commandConfigPath);
+      if (!existsSync(configDir)) {
+        await mkdir(configDir, { recursive: true });
+      }
+
+      let commandConfig: CommandConfig;
+      try {
+        const yamlContent = await fs.readFile(this.commandConfigPath, 'utf8');
+        commandConfig = yaml.parse(yamlContent);
+      } catch (error) {
+        console.warn('Command config not found, using empty configuration');
+        commandConfig = {
+          systemCommands: {
+            allowSudo: false,
+            allowNetworkConfig: false
+          },
+          surrealdb: { allowed: [] },
+          docker: { allowed: [] },
+          kubernetes: { allowed: [] },
+          helm: { allowed: [] },
+          localClusters: { allowed: [] },
+          blocked: []
+        };
+        // Create default command config file
+        await fs.writeFile(
+          this.commandConfigPath,
+          yaml.stringify(commandConfig),
+          'utf8'
+        );
+      }
+      return commandConfig;
+    } catch (error) {
+      console.error('Failed to load command config:', error);
+      throw error;
+    }
   }
 
   /**
@@ -37,6 +78,9 @@ class ConfigManager {
     if (this.initialized) return;
 
     try {
+      // Load command configuration
+      const commandConfig = await this.loadCommandConfig();
+
       // Ensure config directory exists
       const configDir = path.dirname(this.configPath);
       if (!existsSync(configDir)) {
@@ -54,12 +98,14 @@ class ConfigManager {
         this.config = this.getDefaultConfig();
         await this.saveConfig();
       }
-      this.config['version'] = VERSION;
+
+      // Update command configuration
+      this.config.commandConfig = commandConfig;
+      this.config.version = VERSION;
 
       this.initialized = true;
     } catch (error) {
       console.error('Failed to initialize config:', error);
-      // Fall back to default config in memory
       this.config = this.getDefaultConfig();
       this.initialized = true;
     }
@@ -77,56 +123,12 @@ class ConfigManager {
    */
   private getDefaultConfig(): ServerConfig {
     return {
-      blockedCommands: [
-
-        // Disk and partition management
-        "mkfs",      // Create a filesystem on a device
-        "format",    // Format a storage device (cross-platform)
-        "mount",     // Mount a filesystem
-        "umount",    // Unmount a filesystem
-        "fdisk",     // Manipulate disk partition tables
-        "dd",        // Convert and copy files, can write directly to disks
-        "parted",    // Disk partition manipulator
-        "diskpart",  // Windows disk partitioning utility
-        
-        // System administration and user management
-        "sudo",      // Execute command as superuser
-        "su",        // Substitute user identity
-        "passwd",    // Change user password
-        "adduser",   // Add a user to the system
-        "useradd",   // Create a new user
-        "usermod",   // Modify user account
-        "groupadd",  // Create a new group
-        "chsh",      // Change login shell
-        "visudo",    // Edit the sudoers file
-        
-        // System control
-        "shutdown",  // Shutdown the system
-        "reboot",    // Restart the system
-        "halt",      // Stop the system
-        "poweroff",  // Power off the system
-        "init",      // Change system runlevel
-        
-        // Network and security
-        "iptables",  // Linux firewall administration
-        "firewall",  // Generic firewall command
-        "netsh",     // Windows network configuration
-        
-        // Windows system commands
-        "sfc",       // System File Checker
-        "bcdedit",   // Boot Configuration Data editor
-        "reg",       // Windows registry editor
-        "net",       // Network/user/service management
-        "sc",        // Service Control manager
-        "runas",     // Execute command as another user
-        "cipher",    // Encrypt/decrypt files or wipe data
-        "takeown"    // Take ownership of files
-      ],
-      defaultShell: os.platform() === 'win32' ? 'powershell.exe' : 'bash',
+      defaultShell: '/bin/bash',
       allowedDirectories: [],
-      telemetryEnabled: true, // Default to opt-out approach (telemetry on by default)
-      fileWriteLineLimit: 50,  // Default line limit for file write operations (changed from 100)
-      fileReadLineLimit: 1000  // Default line limit for file read operations (changed from character-based)
+      telemetryEnabled: true,
+      fileWriteLineLimit: 50,
+      fileReadLineLimit: 1000,
+      version: VERSION
     };
   }
 

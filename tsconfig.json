@@ -1,8 +1,9 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
-    "module": "Node16",
-    "moduleResolution": "node16",
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "strict": true,
     "outDir": "./dist",
@@ -12,7 +13,7 @@
     "diagnostics": true,
     "extendedDiagnostics": true,
     "listEmittedFiles": true,
-    "types": ["node"]
+    "types": ["bun-types"]
   },
   "include": [
     "src/**/*.ts"

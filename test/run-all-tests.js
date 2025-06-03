@@ -3,11 +3,10 @@
  * Imports and runs all test modules
  */
 
-import { spawn } from 'child_process';
-import path from 'path';
-import fs from 'fs/promises';
+import { spawn } from 'bun';
+import { join, dirname } from 'path';
+import { readdir } from 'fs/promises';
 import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
 
 // Get directory name
 const __filename = fileURLToPath(import.meta.url);
@@ -27,28 +26,18 @@ const colors = {
 /**
  * Run a command and return its output
  */
-function runCommand(command, args, cwd = __dirname) {
-  return new Promise((resolve, reject) => {
-    console.log(`${colors.blue}Running command: ${command} ${args.join(' ')}${colors.reset}`);
-    
-    const proc = spawn(command, args, {
-      cwd,
-      stdio: 'inherit',
-      shell: true
-    });
-    
-    proc.on('close', (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`Command failed with exit code ${code}`));
-      }
-    });
-    
-    proc.on('error', (err) => {
-      reject(err);
-    });
+async function runCommand(command, args, cwd = __dirname) {
+  console.log(`${colors.blue}Running command: ${command} ${args.join(' ')}${colors.reset}`);
+  
+  const proc = spawn([command, ...args], {
+    cwd,
+    stdout: 'inherit',
+    stderr: 'inherit'
   });
+
+  if (!proc.success) {
+    throw new Error(`Command failed with exit code ${proc.exitCode}`);
+  }
 }
 
 /**
